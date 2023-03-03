@@ -11,7 +11,7 @@ Installation Instructions
 		$(CCLINK) -o $(LDFLAGS) $@ coconut_plus_heap.lo -L./ -lmy_heap  -I . -Xlinker -rpath=./ $(DEF_LIB) $(LIBS)
 		$(POSTLINK) $@
 
-    my_heap: $(exampledir)/c/my_heap.cpp
+	my_heap: $(exampledir)/c/my_heap.cpp
     	g++ ../examples/c/my_heap.cpp -shared -o ./libmy_heap.so -I./ -fPIC
 
     5. make

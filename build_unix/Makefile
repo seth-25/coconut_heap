@@ -86,10 +86,10 @@ libso_major=	$(libdb_base)-$(LIBMAJOR).so
 #
 # C++ support is optional, and can be built with static or shared libraries.
 ##################################################
-CXXFLAGS=	-c $(CPPFLAGS) -O3 
-CXX=		$(LIBTOOL) --mode=compile --tag=CXX g++
-CXXLINK=	$(LIBTOOL) --mode=link --tag=CXX g++ -O3
-XSOLINK=	$(LIBTOOL) --mode=link nocxx -avoid-version -O3
+CXXFLAGS=	-c $(CPPFLAGS) -O3
+CXX=		$(LIBTOOL) --mode=compile nocxx
+CXXLINK=	$(LIBTOOL) --mode=link nocxx -O3 
+XSOLINK=	$(LIBTOOL) --mode=link nocxx -avoid-version -O3 
 LIBXSO_LIBS=	  -lpthread
 
 libcxx_base=	libdb_cxx
@@ -1591,7 +1591,7 @@ examples_sql: ex_advertising ex_ad_data ex_ad_event ex_sql_binding \
 
 examples: examples_c examples_cxx examples_stl examples_sql
 
-coconut: coconut coconut_plus coconut_plus_heap
+coconut: coconut coconut_plus
 ##################################################
 # Example programs for C.
 ##################################################
@@ -1639,9 +1639,6 @@ coconut_plus: coconut_plus.lo $(DEF_LIB)
 	$(CCLINK) -o $@ $(LDFLAGS) coconut_plus.lo $(DEF_LIB) $(LIBS)
 	$(POSTLINK) $@
 
-
-
-
 coconut_plus_heap.lo: $(exampledir)/c/coconut_plus_heap.c
 	$(CC) $(CFLAGS) $?
 coconut_plus_heap: coconut_plus_heap.lo
@@ -1650,7 +1647,6 @@ coconut_plus_heap: coconut_plus_heap.lo
 
 my_heap: $(exampledir)/c/my_heap.cpp
 	g++ ../examples/c/my_heap.cpp -shared -o ./libmy_heap.so -I./ -fPIC
-
 
 
 ex_bulk.lo: $(exampledir)/c/ex_bulk.c

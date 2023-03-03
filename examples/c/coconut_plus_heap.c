@@ -439,7 +439,8 @@ int compare(const void *a, const void *b) {
 int sax_from_ts2(float *ts_in, unsigned char *sax_out, int ts_values_per_segment,
                  int segments, int cardinality, int bit_cardinality) {
     // Create PAA representation
-    float *paa = (float *) malloc(sizeof(float) * segments);
+    float paa[segments];
+//    float *paa = (float *) malloc(sizeof(float) * segments);
     if (paa == NULL) {
         fprintf(stderr, "error: could not allocate memory for PAA representation.\n");
         return 0;
@@ -483,7 +484,7 @@ int sax_from_ts2(float *ts_in, unsigned char *sax_out, int ts_values_per_segment
     }
 
     //sax_print(sax_out, segments, cardinality);
-    free(paa);
+//    free(paa);
     return 1;
 }
 
@@ -698,7 +699,7 @@ int db_init(DB_ENV *dbenv, DB **dbpp, int dups, int secondaryflag, int pagesize)
 }
 
 
-int coconut_plus_heap(int ts_num, int memory, int EXACT, int queriesnumber, int indexing, int leafsize, char *dataset,
+int coconut_plus_heap(long ts_num, int memory, int EXACT, int queriesnumber, int indexing, int leafsize, char *dataset,
                       char *queries, int lenz, int k) {
     int range = leafsize / 2;
     int debug = 0;
@@ -715,10 +716,11 @@ int coconut_plus_heap(int ts_num, int memory, int EXACT, int queriesnumber, int 
     DBT databulk;        /* The data to dbcp->put()/from dbcp->get(). */
     DB_BTREE_STAT *statp;    /* The statistic pointer to record the total amount of record number. */
     FILE *fp;        /* File pointer that points to the wordlist. */
+    FILE *fp1;
     FILE *qfp;        /* File pointer that points to the queries. */
     db_recno_t recno;    /* Record number to retrieve a record in access.db database. */
     size_t len;        /* The size of buffer. */
-    int cnt;        /* The count variable to read records from wordlist. */
+    long cnt;        /* The count variable to read records from wordlist. */
     int ret;        /* Return code from call into Berkeley DB. */
     char *p;        /* Pointer to store buffer. */
     char *t;        /* Pointer to store reverse buffer. */
@@ -815,33 +817,42 @@ int coconut_plus_heap(int ts_num, int memory, int EXACT, int queriesnumber, int 
     unsigned char *invsax = (unsigned char *) malloc(sizeof(unsigned char) * paa_segments);
 
     //unsigned char * value = (unsigned char *)  malloc(sizeof(char) * ((paa_segments*sax_bit_cardinality)+1));
-
+    printf("malloc:%lu bytes\n",sizeof(my_node) * ts_num);
     my_node *currqueue = (my_node *) malloc(sizeof(my_node) * ts_num);
-
 
     if (indexing != 0) {
         current_time = time(NULL);
         c_time_string = ctime(&current_time);
         printf("\nIndexing starting for %d data series with %d memory and leafsize %d time series size:%d", ts_num,
                memory, leafsize, timeseries_size);
-
+        printf("开始\n");
         timer_start(&start);
 
         timer_start(&iostart);
-
         if ((fp = fopen(dataset, "r")) == NULL) {
             fprintf(stderr, "%s: open %s: %s\n",
                     progname, dataset, db_strerror(errno));
             return (1);
         }
-
+        fp1 = fp;
         ioduration = timer_end(&iostart);
 
+
+        unsigned long long * filepositionp = (unsigned long long *)malloc((size_t)ts_num * 8);
+        unsigned char *invsaxp = (unsigned char *)malloc((size_t)ts_num * 16);
+
+
         for (cnt = 0; cnt < ts_num; cnt++) {
+            if(cnt % 1000000 == 0) {
+                printf("第%d次插入 插入大小%dG, malloc大小： %fG\n", cnt, cnt / 1000000, (double)24*cnt/1000000000);
+            }
             timer_start(&iostart);
 
-            currqueue[cnt].fileposition = (unsigned long long *) malloc(sizeof(unsigned long long));
-            *(currqueue[cnt].fileposition) = ftell(fp);
+            filepositionp[cnt] = ftell(fp);
+            currqueue[cnt].fileposition = &(filepositionp[cnt]);
+
+//            currqueue[cnt].fileposition = filepositionp + cnt;
+//            *(currqueue[cnt].fileposition) = ftell(fp);
 
             fread(ts, sizeof(float), timeseries_size, fp);
             ioduration += timer_end(&iostart);
@@ -850,7 +861,7 @@ int coconut_plus_heap(int ts_num, int memory, int EXACT, int queriesnumber, int 
                              paa_segments, sax_alphabet_cardinality,
                              sax_bit_cardinality) == 1) {
 
-                currqueue[cnt].invsax = (unsigned char *) malloc(sizeof(unsigned char) * paa_segments);
+                currqueue[cnt].invsax = &invsaxp[cnt];
 
                 invSax(currqueue[cnt].invsax, sax, paa_segments, sax_bit_cardinality);
 
@@ -866,6 +877,7 @@ int coconut_plus_heap(int ts_num, int memory, int EXACT, int queriesnumber, int 
                 	       	    failed to be created");
             } //end sax!=success
         }//end for
+
         if (debug == 1) {
             printf("\nSorting started");
             fflush(stdout);
@@ -877,6 +889,7 @@ int coconut_plus_heap(int ts_num, int memory, int EXACT, int queriesnumber, int 
             printf("\n Summarizations do not fit in main memory and external merge sort should be used instead");
             //return;
         }
+        printf("开始排序\n");
         qsort(((void *) currqueue), ((size_t) ts_num), ((size_t)
                 sizeof(my_node)), myz_compare);
         //qsort_mt(((void *)currqueue), ((size_t)ts_num), ((size_t)sizeof(my_node)),  myz_compare);
@@ -895,6 +908,9 @@ int coconut_plus_heap(int ts_num, int memory, int EXACT, int queriesnumber, int 
         //printf("\n\n");
         cnt = 0;
         while (cnt < ts_num) {
+            if(cnt % 1000000 == 0) {
+                printf("第%d次put 插入大小%dG\n", cnt, cnt / 1000000);
+            }
 
             //key.data = currqueue[cnt].invsax;
             //key.size = sizeof(unsigned char)*paa_segments;
@@ -940,29 +956,30 @@ int coconut_plus_heap(int ts_num, int memory, int EXACT, int queriesnumber, int 
                  }*/
 
 
-            //free(currqueue[cnt].invsax);
-            //free(currqueue[cnt].fileposition);
+//            free(currqueue[cnt].invsax);
+//            free(currqueue[cnt].fileposition);
             cnt++;
         }
         if ((ret = dbp->put(dbp, NULL, &keybulk, &databulk, DB_MULTIPLE)) != 0) {
             dbp->err(dbp, ret, "DB->put");
         }
 
-        for (cnt = 0; cnt < ts_num; cnt++) {
-            free(currqueue[cnt].invsax);
-            free(currqueue[cnt].fileposition);
-        }
+//        for (cnt = 0; cnt < ts_num; cnt++) {
+//            free(currqueue[cnt].invsax);
+//            free(currqueue[cnt].fileposition);
+//        }
+        printf("put完成\n");
+        free(invsaxp);
+        free(filepositionp);
         free(keybulk.data);
         free(databulk.data);
         free(currqueue);
 
-
-        fclose(fp);
         duration = timer_end(&start);
         printf("\n[STAT] Insert %lld records", ts_num);
         printf(" in %f seconds (durationsort:%f) ", duration, durationsort);
-
-
+        printf("\n IO read:%f ", ioduration);
+        printf("\n开始dp compact\n");
         dbp->compact(dbp, NULL, NULL, NULL, NULL, DB_FREE_SPACE, NULL);
         if ((ret = dbp->close(dbp, 0)) != 0) {
             fprintf(stderr,
@@ -970,8 +987,9 @@ int coconut_plus_heap(int ts_num, int memory, int EXACT, int queriesnumber, int 
             return (1);
         }
 
-        printf("\n IO read:%f ", ioduration);
+
         fflush(stdout);
+        fclose(fp);
     }
 
 
